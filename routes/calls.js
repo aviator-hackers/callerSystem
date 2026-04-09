@@ -30,18 +30,18 @@ router.post('/initiate', async (req, res) => {
         }
         
         const session = await db.query(
-            `INSERT INTO call_sessions (contact_id, subject, custom_intro, status) VALUES ($1, $2, $3, $4) RETURNING id`,
-            [contactId, subject || null, custom_intro || null, 'initiated']
+            `INSERT INTO call_sessions (contact_id, subject, custom_intro, status, current_action) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+            [contactId, subject || null, custom_intro || null, 'initiated', 'consent']
         );
         
         const sessionId = session.rows[0].id;
         const serverUrl = req.protocol + '://' + req.get('host');
         
         const call = await client.calls.create({
-            url: `${serverUrl}/webhooks/voice-response/${sessionId}`,
+            url: `${serverUrl}/webhooks/voice-response?sessionId=${sessionId}`,
             to: phone_number,
             from: process.env.TWILIO_PHONE_NUMBER,
-            statusCallback: `${serverUrl}/webhooks/call-status/${sessionId}`,
+            statusCallback: `${serverUrl}/webhooks/call-status?sessionId=${sessionId}`,
             statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
             statusCallbackMethod: 'POST'
         });
