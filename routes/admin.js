@@ -90,7 +90,7 @@ router.get('/active-calls', async (req, res) => {
                     c.phone_number, c.full_name
              FROM call_sessions cs
              JOIN contacts c ON cs.contact_id = c.id
-             WHERE cs.status IN ('initiated', 'in_progress')
+             WHERE cs.status IN ('initiated', 'in_progress', 'answered')
              ORDER BY cs.started_at DESC`
         );
         res.json(result.rows);
