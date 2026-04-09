@@ -9,6 +9,8 @@ router.post('/initiate', async (req, res) => {
     const { phone_number, full_name, subject, custom_intro } = req.body;
     const io = req.app.get('io');
     
+    console.log('Initiating call to:', phone_number);
+    
     try {
         let contact = await db.query(
             `SELECT id FROM contacts WHERE phone_number = $1`,
@@ -36,6 +38,9 @@ router.post('/initiate', async (req, res) => {
         
         const sessionId = session.rows[0].id;
         const serverUrl = req.protocol + '://' + req.get('host');
+        
+        console.log('Session ID:', sessionId);
+        console.log('Webhook URL:', `${serverUrl}/webhooks/voice-response?sessionId=${sessionId}`);
         
         const call = await client.calls.create({
             url: `${serverUrl}/webhooks/voice-response?sessionId=${sessionId}`,
