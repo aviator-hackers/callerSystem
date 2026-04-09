@@ -8,7 +8,6 @@ const path = require('path');
 const callsRoutes = require('./routes/calls');
 const webhooksRoutes = require('./routes/webhooks');
 const adminRoutes = require('./routes/admin');
-const db = require('./database/db');
 
 const app = express();
 const server = http.createServer(app);
