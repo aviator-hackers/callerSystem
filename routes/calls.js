@@ -37,16 +37,17 @@ router.post('/initiate', async (req, res) => {
         );
         
         const sessionId = session.rows[0].id;
-        const serverUrl = req.protocol + '://' + req.get('host');
+        // FORCE HTTPS FOR RENDER
+        const serverUrl = 'https://' + req.get('host');
         
         console.log('Session ID:', sessionId);
-        console.log('Webhook URL:', `${serverUrl}/webhooks/voice-response?sessionId=${sessionId}`);
+        console.log('Webhook URL:', `${serverUrl}/webhooks/voice-response/${sessionId}`);
         
         const call = await client.calls.create({
-            url: `${serverUrl}/webhooks/voice-response?sessionId=${sessionId}`,
+            url: `${serverUrl}/webhooks/voice-response/${sessionId}`,
             to: phone_number,
             from: process.env.TWILIO_PHONE_NUMBER,
-            statusCallback: `${serverUrl}/webhooks/call-status?sessionId=${sessionId}`,
+            statusCallback: `${serverUrl}/webhooks/call-status/${sessionId}`,
             statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
             statusCallbackMethod: 'POST'
         });
