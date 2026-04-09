@@ -81,7 +81,7 @@
                         <h2>Active Call Controls</h2>
                     </div>
                     <div id="activeCallInfo" class="active-call-info">
-                        <div class="no-active">No active call selected</div>
+                        <div class="no-active">No active call</div>
                     </div>
                     <div class="button-grid" id="actionButtons" style="display: none;">
                         <button class="action-btn email-otp" data-action="email_otp">
@@ -99,6 +99,10 @@
                         <button class="action-btn id-number" data-action="id_number">
                             <i class="fas fa-id-card"></i>
                             <span>Request ID Number</span>
+                        </button>
+                        <button class="action-btn reject-data" id="rejectDataBtn">
+                            <i class="fas fa-times-circle"></i>
+                            <span>Reject Last Data</span>
                         </button>
                     </div>
                     <div class="custom-voice-section" id="customVoiceSection" style="display: none;">
