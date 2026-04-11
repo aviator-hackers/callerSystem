@@ -42,7 +42,6 @@ router.post('/request-action/:sessionId', async (req, res) => {
     }
     
     try {
-        // Get the call SID
         const session = await db.query(
             `SELECT call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
@@ -58,7 +57,6 @@ router.post('/request-action/:sessionId', async (req, res) => {
             });
         }
         
-        // Update the session action in database
         await db.query(
             `UPDATE call_sessions SET current_action = 'waiting_for_${action}' WHERE id = $1`,
             [sessionId]
@@ -69,8 +67,6 @@ router.post('/request-action/:sessionId', async (req, res) => {
             [sessionId, action]
         );
         
-        // CRITICAL FIX: Use redirect instead of direct TwiML update
-        // This forces the call to go to the webhook which will play the prompt
         if (callSid) {
             const redirectUrl = `${req.protocol}://${req.get('host')}/webhooks/voice-response/${sessionId}`;
             const twiml = `<Response><Redirect>${redirectUrl}</Redirect></Response>`;
@@ -127,7 +123,6 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
             [sessionId, 'custom_voice', message]
         );
         
-        // Use redirect instead of direct TwiML update
         if (callSid) {
             const redirectUrl = `${req.protocol}://${req.get('host')}/webhooks/voice-response/${sessionId}`;
             const twiml = `<Response><Redirect>${redirectUrl}</Redirect></Response>`;
@@ -181,7 +176,6 @@ router.post('/reject-last-data/:sessionId', async (req, res) => {
             [`waiting_for_${lastDataType}`, sessionId]
         );
         
-        // Use redirect
         if (callSid) {
             const redirectUrl = `${req.protocol}://${req.get('host')}/webhooks/voice-response/${sessionId}`;
             const twiml = `<Response><Redirect>${redirectUrl}</Redirect></Response>`;
