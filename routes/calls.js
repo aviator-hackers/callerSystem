@@ -37,7 +37,6 @@ router.post('/initiate', async (req, res) => {
         );
         
         const sessionId = session.rows[0].id;
-        // FORCE HTTPS FOR RENDER
         const serverUrl = 'https://' + req.get('host');
         
         console.log('Session ID:', sessionId);
